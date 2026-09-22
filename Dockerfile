@@ -5,12 +5,11 @@ FROM maven:3.9.9-eclipse-temurin-17-alpine AS builder
 
 WORKDIR /build
 
-# Cache Maven dependencies layer
+# Copy project definition and source code
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
-
-# Copy source code and build production artifact
 COPY src ./src
+
+# Build production artifact without running tests (tests already verified)
 RUN mvn clean package -DskipTests -B
 
 # ==========================================
