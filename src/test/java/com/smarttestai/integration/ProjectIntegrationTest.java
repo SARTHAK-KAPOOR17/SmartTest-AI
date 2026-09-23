@@ -37,6 +37,12 @@ class ProjectIntegrationTest {
     private TestRestTemplate restTemplate;
 
     @Autowired
+    private com.smarttestai.repository.TestCaseRepository testCaseRepository;
+
+    @Autowired
+    private com.smarttestai.repository.UserStoryRepository userStoryRepository;
+
+    @Autowired
     private ProjectRepository projectRepository;
 
     @Autowired
@@ -61,6 +67,8 @@ class ProjectIntegrationTest {
     @BeforeEach
     void cleanUpAndAuthenticate() {
         restTemplate.getRestTemplate().setRequestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory());
+        testCaseRepository.deleteAll();
+        userStoryRepository.deleteAll();
         projectRepository.deleteAll();
         userRepository.deleteAll();
 

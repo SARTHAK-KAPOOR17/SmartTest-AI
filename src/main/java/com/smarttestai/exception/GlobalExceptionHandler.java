@@ -33,6 +33,8 @@ public class GlobalExceptionHandler {
         if (ex.getMessage() != null) {
             if (ex.getMessage().contains("User Story")) {
                 errorCode = "USER_STORY_NOT_FOUND";
+            } else if (ex.getMessage().contains("Test Case")) {
+                errorCode = "TEST_CASE_NOT_FOUND";
             } else if (ex.getMessage().contains("Project")) {
                 errorCode = "PROJECT_NOT_FOUND";
             }
@@ -47,6 +49,54 @@ public class GlobalExceptionHandler {
                 .build();
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+    @ExceptionHandler(UserStoryNotReadyException.class)
+    public ResponseEntity<ErrorResponse> handleUserStoryNotReadyException(UserStoryNotReadyException ex,
+                                                                         HttpServletRequest request) {
+        log.warn("User story not ready for AI generation: {} - Path: {}", ex.getMessage(), request.getRequestURI());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.BAD_REQUEST.value())
+                .error("USER_STORY_NOT_READY")
+                .message(ex.getMessage())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
+    @ExceptionHandler(AiServiceException.class)
+    public ResponseEntity<ErrorResponse> handleAiServiceException(AiServiceException ex,
+                                                                 HttpServletRequest request) {
+        log.error("AI service error on {}: {}", request.getRequestURI(), ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.SERVICE_UNAVAILABLE.value())
+                .error("AI_SERVICE_UNAVAILABLE")
+                .message(ex.getMessage())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
+    }
+
+    @ExceptionHandler(AiInvalidResponseException.class)
+    public ResponseEntity<ErrorResponse> handleAiInvalidResponseException(AiInvalidResponseException ex,
+                                                                         HttpServletRequest request) {
+        log.error("AI response invalid on {}: {}", request.getRequestURI(), ex.getMessage());
+
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(Instant.now())
+                .status(HttpStatus.BAD_GATEWAY.value())
+                .error("AI_RESPONSE_INVALID")
+                .message(ex.getMessage())
+                .path(request.getRequestURI())
+                .build();
+
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(errorResponse);
     }
 
     @ExceptionHandler(UserAlreadyExistsException.class)

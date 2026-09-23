@@ -7,7 +7,10 @@
 This repository represents the production-grade modular monolith securing multi-tenant test automation projects and user stories through:
 - **Phase 1: Project Foundation**
 - **Phase 2: User Authentication, Authorization & Project Ownership**
-- **Phase 3: User Story Management** (Input preparation for Phase 4 AI Test Generation)
+- **Phase 1: Project Foundation**
+- **Phase 2: User Authentication, Authorization & Project Ownership**
+- **Phase 3: User Story Management**
+- **Phase 4: AI Test Case Generation** (LangChain4j + LLM Structured Output)
 
 ---
 
@@ -30,7 +33,7 @@ This repository represents the production-grade modular monolith securing multi-
 
 ### Phase 3 — User Story Management
 - **Hierarchical Domain Structure**: 
-  $$\text{User} \longrightarrow \text{Project} \longrightarrow \text{User Story} \longrightarrow \text{(Future: AI Test Cases)}$$
+  $$\text{User} \longrightarrow \text{Project} \longrightarrow \text{User Story} \longrightarrow \text{TestCase} \longrightarrow \text{TestStep}$$
 - **User Story Domain Model**:
   - `id`: Auto-generated identifier.
   - `project`: Strongly typed `@ManyToOne` association linking each story to its project.
@@ -42,7 +45,17 @@ This repository represents the production-grade modular monolith securing multi-
   - `createdAt` / `updatedAt`: Audited timestamps.
 - **Two-Tier IDOR Protection**: Server enforces project ownership before accessing stories; mismatch or foreign probes always return `404 Not Found`.
 - **Filtering & Phase 4 AI Bridge**: List endpoint supports query parameters `?status=READY&priority=HIGH`. When stories transition to `status = READY`, they serve as clean context for Phase 4's LLM test generator.
-- **Automated Test Suite**: 54 automated unit, web-layer, security, and integration tests with 100% pass rate.
+
+### Phase 4 — AI Test Case Generation
+- **LangChain4j Integration**: Clean, vendor-agnostic chat model abstraction (`ChatLanguageModel`) supporting OpenAI (`gpt-4o-mini`), Groq, local Ollama, and a zero-network `MockTestCaseGenerator` for offline development and CI/CD pipelines.
+- **Decoupled Test Case Model**:
+  - `TestCase`: Independent `TestPriority` (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), `TestCaseType` (`POSITIVE`, `NEGATIVE`, `EDGE_CASE`, `SECURITY`), preconditions, and expected overall result.
+  - `TestStep`: Structured `@Embeddable` value objects with `stepNumber`, `action`, and `expectedResult` cleanly separating interactions from assertions for Phase 5 Selenium generation.
+- **Prompt Injection Defense & Guardrails**: Strict XML boundary tagging (`<user_story_input>`) and system prompt security instructions to prevent untrusted user story content from overriding AI directives.
+- **5-Stage Validation Pipeline**: Validates raw JSON schema, bean constraints, required scenarios, and title deduplication before persisting to PostgreSQL.
+- **Three-Tier IDOR Protection**: Scoped enforcement across `Project` $\rightarrow$ `UserStory` $\rightarrow$ `TestCase` returning `404 Not Found` for unauthorized cross-tenant requests.
+- **Human-in-the-Loop Lifecycle**: Explicit state transitions (`GENERATED` $\rightarrow$ `REVIEWED` $\rightarrow$ `APPROVED` / `REJECTED`) allowing QA engineers to edit and verify test cases before automation.
+- **Automated Test Suite**: 87 automated unit, web-layer, security, and integration tests with **100% pass rate**.
 
 ---
 
@@ -148,22 +161,28 @@ All tests run against an in-memory H2 database in PostgreSQL mode (`application-
 mvn clean test
 ```
 
-### Test Coverage Highlights (54 Tests / 100% Pass Rate):
-* **Unit Tests (26 Tests)**:
+### Test Coverage Highlights (87 Tests / 100% Pass Rate):
+* **Unit Tests (43 Tests)**:
   * [`JwtServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/security/JwtServiceTest.java) (4): Token issuance, claim parsing (`sub`, `userId`, `role`), expiry, tampering rejection.
   * [`AuthServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/service/AuthServiceTest.java) (4): User registration with BCrypt hashing, duplicate check (409), login validation.
   * [`ProjectServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/service/ProjectServiceTest.java) (9): Owner assignment, tenant isolation, admin cross-tenant listing, 404 on unowned.
   * [`UserStoryServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/service/UserStoryServiceTest.java) (9): Story creation under project, status/priority filtering, IDOR boundary validation, updates, deletes.
-* **Web Layer Tests (21 Tests)**:
+  * [`PromptBuilderServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/ai/PromptBuilderServiceTest.java) (3): XML boundary formatting, prompt injection guard verification, version tagging.
+  * [`LangChain4jTestCaseGeneratorTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/ai/LangChain4jTestCaseGeneratorTest.java) (5): Structured JSON parsing, markdown fence stripping, schema validation, exception mapping.
+  * [`TestCaseServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/service/TestCaseServiceTest.java) (9): READY status check, AI generation outside DB transaction, title deduplication, manual CRUD, status transition.
+* **Web Layer Tests (29 Tests)**:
   * [`AuthControllerTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/controller/AuthControllerTest.java) (5): MockMvc validation for `/register` and `/login`.
   * [`ProjectControllerTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/controller/ProjectControllerTest.java) (8): MockMvc tests for all Project CRUD endpoints.
   * [`UserStoryControllerTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/controller/UserStoryControllerTest.java) (8): MockMvc validation for User Story CRUD endpoints.
-* **Integration Tests (7 Tests)**:
+  * [`TestCaseControllerTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/controller/TestCaseControllerTest.java) (8): MockMvc tests for AI generation, manual creation, filtering, get, update, status patch, delete.
+* **Integration Tests (15 Tests)**:
   * [`AuthIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/AuthIntegrationTest.java) (1): End-to-end registration, BCrypt in DB, login, and error checks.
   * [`ProjectSecurityIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/ProjectSecurityIntegrationTest.java) (2): Multi-user project isolation, 401 unauthenticated check, Admin management.
   * [`ProjectIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/ProjectIntegrationTest.java) (1): Complete project CRUD lifecycle with JWT Bearer authentication.
   * [`UserStorySecurityIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/UserStorySecurityIntegrationTest.java) (2): Multi-tenant story isolation, cross-project IDOR probe rejection (returns 404), Admin management.
   * [`UserStoryIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/UserStoryIntegrationTest.java) (1): Complete story CRUD lifecycle, status/priority filtering, and delete verification.
+  * [`TestCaseGenerationIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/TestCaseGenerationIntegrationTest.java) (3): End-to-end AI test case generation, DRAFT rejection, review status transition, and manual CRUD.
+  * [`TestCaseSecurityIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/TestCaseSecurityIntegrationTest.java) (5): Three-tier IDOR prevention across tenants and admin cross-tenant inspection.
 
 ---
 
@@ -195,6 +214,18 @@ mvn clean test
 | `PUT` | `/api/v1/projects/{projectId}/stories/{storyId}` | `UpdateUserStoryRequest` | Update user story fields or status (`READY`). |
 | `DELETE`| `/api/v1/projects/{projectId}/stories/{storyId}` | None | Delete user story from project. |
 
+### 4. Test Case APIs (Protected — Requires `Authorization: Bearer <JWT>`)
+
+| Method | Path | Request Body | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/projects/{projectId}/stories/{storyId}/test-cases/generate` | None | AI-generate test cases from a READY user story using LangChain4j. |
+| `POST` | `/api/v1/projects/{projectId}/stories/{storyId}/test-cases` | `CreateTestCaseRequest` | Manually create a test case under the user story. |
+| `GET` | `/api/v1/projects/{projectId}/stories/{storyId}/test-cases` | None (`?type=&priority=&status=`) | List test cases with optional filters. |
+| `GET` | `/api/v1/projects/{projectId}/stories/{storyId}/test-cases/{testCaseId}` | None | Retrieve a specific test case by ID. |
+| `PUT` | `/api/v1/projects/{projectId}/stories/{storyId}/test-cases/{testCaseId}` | `UpdateTestCaseRequest` | Update test case fields or steps. |
+| `PATCH`| `/api/v1/projects/{projectId}/stories/{storyId}/test-cases/{testCaseId}/status` | `UpdateTestCaseStatusRequest` | Transition review status (`GENERATED` $\rightarrow$ `APPROVED`). |
+| `DELETE`| `/api/v1/projects/{projectId}/stories/{storyId}/test-cases/{testCaseId}` | None | Delete a test case from the user story. |
+
 ---
 
 ## Using Swagger UI with Authentication
@@ -204,13 +235,16 @@ mvn clean test
 3. Copy the `token` string from the JSON response.
 4. Click the green **Authorize 🔓** button at the top right of the Swagger UI page.
 5. Paste the token into the value field and click **Authorize**.
-6. All requests to `/api/v1/projects` and `/api/v1/projects/{projectId}/stories` will automatically include the `Authorization: Bearer <token>` header.
+6. All requests to `/api/v1/projects/**` will automatically include the `Authorization: Bearer <token>` header.
 
 ---
 
 ## Future Roadmap
 
-- [ ] **Phase 4 — AI Test Case Generation**: Natural language user story ingestion (fetching stories where `status = READY`), scenario decomposition via LLM, and automated test scenario generation.
+- [x] **Phase 1 — Project Foundation**: Project entity, CRUD APIs, Swagger, Docker, baseline tests.
+- [x] **Phase 2 — User Authentication, Authorization & Project Ownership**: JWT, BCrypt, RBAC, multi-tenant isolation.
+- [x] **Phase 3 — User Story Management**: Requirements domain, Gherkin acceptance criteria, status filtering.
+- [x] **Phase 4 — AI Test Case Generation**: LangChain4j integration, anti-prompt injection, structured JSON output, human review workflow, 87 automated tests.
 - [ ] **Phase 5 — Selenium Test Automation**: Automated executable Selenium Java test script generation and execution runner.
 - [ ] **Phase 6 — DOM Tree Analysis & Locator Engine**: Real-time webpage DOM capture, semantic tagging, and resilient selector generation.
 - [ ] **Phase 7 — Self-Healing Engine**: Dynamic fallback locator matching, automatic script healing, and healing audit records.

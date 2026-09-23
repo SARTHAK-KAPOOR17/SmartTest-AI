@@ -24,6 +24,15 @@ jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 
+llm:
+  provider: ${LLM_PROVIDER:openai}
+  api-key: ${LLM_API_KEY:demo-api-key}
+  model-name: ${LLM_MODEL_NAME:gpt-4o-mini}
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  temperature: ${LLM_TEMPERATURE:0.2}
+  timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
+  max-tokens: ${LLM_MAX_TOKENS:3000}
+
 management:
   endpoints:
     web:

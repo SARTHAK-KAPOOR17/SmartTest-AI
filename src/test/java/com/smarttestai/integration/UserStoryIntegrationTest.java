@@ -43,6 +43,9 @@ class UserStoryIntegrationTest {
     private TestRestTemplate restTemplate;
 
     @Autowired
+    private com.smarttestai.repository.TestCaseRepository testCaseRepository;
+
+    @Autowired
     private UserStoryRepository userStoryRepository;
 
     @Autowired
@@ -75,6 +78,7 @@ class UserStoryIntegrationTest {
     @BeforeEach
     void cleanUpAndSetup() {
         restTemplate.getRestTemplate().setRequestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory());
+        testCaseRepository.deleteAll();
         userStoryRepository.deleteAll();
         projectRepository.deleteAll();
         userRepository.deleteAll();

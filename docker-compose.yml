@@ -33,6 +33,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       JWT_SECRET: ${JWT_SECRET:-404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_API_KEY: ${LLM_API_KEY:-demo-api-key}
+      LLM_MODEL_NAME: ${LLM_MODEL_NAME:-gpt-4o-mini}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       SPRING_PROFILES_ACTIVE: default
     depends_on:
       postgres:
