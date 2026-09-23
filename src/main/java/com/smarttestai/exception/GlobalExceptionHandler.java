@@ -29,7 +29,14 @@ public class GlobalExceptionHandler {
                                                                          HttpServletRequest request) {
         log.warn("Resource not found: {} - Path: {}", ex.getMessage(), request.getRequestURI());
 
-        String errorCode = ex.getMessage() != null && ex.getMessage().contains("Project") ? "PROJECT_NOT_FOUND" : "NOT_FOUND";
+        String errorCode = "NOT_FOUND";
+        if (ex.getMessage() != null) {
+            if (ex.getMessage().contains("User Story")) {
+                errorCode = "USER_STORY_NOT_FOUND";
+            } else if (ex.getMessage().contains("Project")) {
+                errorCode = "PROJECT_NOT_FOUND";
+            }
+        }
 
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(Instant.now())
