@@ -4,49 +4,95 @@
 
 **SmartTest AI** is an intelligent, self-healing quality assurance and test automation platform designed to simplify web application testing, eliminate fragile locator maintenance, and automatically heal broken test scripts during execution.
 
-This repository represents **Phase 1: Project Foundation** — the production-grade modular monolith backbone upon which future AI-driven and self-healing automation components will be built.
+This repository represents the production-grade modular monolith backbone securing multi-tenant test automation projects through **Phase 1: Project Foundation** and **Phase 2: User Authentication, Authorization & Project Ownership**.
 
 ---
 
-## Phase 1 — Project Foundation
+## Implemented Phases
 
-Phase 1 establishes a clean, scalable architectural baseline with:
-- **Modular Monolith Architecture**: High cohesion, low coupling, and zero premature microservices complexity.
+### Phase 1 — Project Foundation
+- **Modular Monolith Backbone**: Spring Boot 3.3.4, Java 17, Maven.
 - **RESTful Domain Core**: Full CRUD operations for QA automation **Projects**.
 - **Robust Exception Handling**: Uniform API error schemas with structured validation and resource lookup handling.
 - **Production Observability**: Spring Boot Actuator health checks and metrics.
 - **Self-Documenting API**: Springdoc OpenAPI 3 / Swagger UI specification.
-- **Isolated Testing Suite**: Fast, zero-dependency unit and integration testing powered by JUnit 5, Mockito, and H2 (PostgreSQL compatibility mode).
-- **Container-Ready**: Multi-stage Dockerfile and Docker Compose orchestration.
+- **Containerization**: Multi-stage Dockerfile and Docker Compose orchestration.
+
+### Phase 2 — User Authentication, Authorization & Project Ownership
+- **Stateless JWT Security**: Spring Security 6 + JJWT (HMAC-SHA256) stateless token-based authentication.
+- **Password Security**: Cryptographically secure hashing with `BCryptPasswordEncoder` (10 rounds). Passwords are never stored in plaintext, never logged, and never returned in API payloads.
+- **Role-Based Access Control (RBAC)**: Distinct permissions for `ROLE_USER` (standard tenant) and `ROLE_ADMIN` (system administrator).
+- **Multi-Tenant Project Ownership**: Every project belongs to an authenticated user (`owner`). Standard users can only view, manage, and delete their own projects. Accessing an unowned project yields `404 Not Found` (preventing ID enumeration / IDOR vulnerabilities).
+- **Interactive Swagger Authentication**: OpenAPI 3 Bearer HTTP scheme configured for seamless testing directly from Swagger UI.
+- **Database Safety & Migration**: Automatic startup bootstrap (`DataInitializer`) that seeds an administrative account and adopts orphaned projects from earlier stages.
+- **Comprehensive Test Suite**: 34 unit, controller, and end-to-end integration tests with 100% pass rate.
 
 ---
 
 ## Architecture
 
-SmartTest AI follows standard Clean Architecture / Layered Architecture principles:
+SmartTest AI follows Clean Architecture / Layered Architecture within a Modular Monolith:
 
 ```text
-[ Client / API Consumer / Swagger UI ]
-                   │
-                   ▼ (HTTP / JSON)
-        ┌─────────────────────┐
-        │  ProjectController  │   <- REST Presentation Layer (Validation & OpenAPI)
-        └──────────┬──────────┘
-                   │ DTOs (Request / Response)
-                   ▼
-        ┌─────────────────────┐
-        │   ProjectService    │   <- Business Logic & Transaction Management
-        └──────────┬──────────┘
-                   │ Domain Entities
-                   ▼
-        ┌─────────────────────┐
-        │  ProjectRepository  │   <- Spring Data JPA Persistence Layer
-        └──────────┬──────────┘
-                   │ JDBC
-                   ▼
-        ┌─────────────────────┐
-        │  PostgreSQL 16 DB   │   <- Persistent Relational Store (or H2 in test)
-        └─────────────────────┘
+                                 ┌──────────────────────────────────────┐
+                                 │       Client / UI / Swagger UI       │
+                                 └──────────────────┬───────────────────┘
+                                                    │ HTTP Request
+                                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Spring Security Filter Chain                                                                          │
+│                                                                                                       │
+│   ┌───────────────────────────┐      Public Endpoint?                                                 │
+│   │  JwtAuthenticationFilter  │ ───────────────────────────► Permit Access                            │
+│   └─────────────┬─────────────┘      (/api/v1/auth/**, /swagger-ui/**, etc.)                          │
+│                 │ (Extract Bearer Token)                                                              │
+│                 ▼                                                                                     │
+│   ┌───────────────────────────┐                                                                       │
+│   │        JwtService         │ ◄── Validates signature, claims & expiration                          │
+│   └─────────────┬─────────────┘                                                                       │
+│                 │                                                                                     │
+│                 ▼                                                                                     │
+│   ┌───────────────────────────┐                                                                       │
+│   │ CustomUserDetailsService  │ ◄── Loads UserDetails from DB                                         │
+│   └─────────────┬─────────────┘                                                                       │
+│                 │                                                                                     │
+│                 ▼                                                                                     │
+│   ┌───────────────────────────┐                                                                       │
+│   │      SecurityContext      │ ─── Sets Authenticated Principal into SecurityContextHolder           │
+│   └───────────────────────────┘                                                                       │
+└───────────────────────────────────────────────────┬───────────────────────────────────────────────────┘
+                                                    │
+                                                    ▼
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Presentation & Business Layer                                                                        │
+│                                                                                                       │
+│    ┌─────────────────────────┐               ┌────────────────────────────────────────────────┐       │
+│    │     AuthController      │               │               ProjectController                │       │
+│    └────────────┬────────────┘               └───────────────────────┬────────────────────────┘       │
+│                 │                                                    │ @AuthenticationPrincipal       │
+│                 ▼                                                    ▼                                │
+│    ┌─────────────────────────┐               ┌────────────────────────────────────────────────┐       │
+│    │       AuthService       │               │                 ProjectService                 │       │
+│    └────────────┬────────────┘               └───────────────────────┬────────────────────────┘       │
+│                 │                                                    │ Scoped by Owner / Role         │
+│                 ▼                                                    ▼                                │
+│    ┌─────────────────────────┐               ┌────────────────────────────────────────────────┐       │
+│    │     UserRepository      │               │               ProjectRepository                │       │
+│    └────────────┬────────────┘               └───────────────────────┬────────────────────────┘       │
+│                 │                                                    │                                │
+│                 └────────────────────────────┬───────────────────────┘                                │
+│                                              ▼                                                        │
+│                                   PostgreSQL 16 Database                                              │
+│                                   ┌────────────────────┐                                              │
+│                                   │       users        │                                              │
+│                                   └─────────┬──────────┘                                              │
+│                                             │ 1                                                       │
+│                                             │                                                         │
+│                                             │ N                                                       │
+│                                   ┌─────────▼──────────┐                                              │
+│                                   │      projects      │ (owner_id FK -> users.id)                    │
+│                                   └────────────────────┘                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -57,6 +103,8 @@ SmartTest AI follows standard Clean Architecture / Layered Architecture principl
 | :--- | :--- | :--- |
 | **Language** | Java | 17 (LTS) |
 | **Framework** | Spring Boot | 3.3.4 |
+| **Security** | Spring Security | 6.3.3 |
+| **JWT Library** | JJWT (io.jsonwebtoken) | 0.12.6 |
 | **Persistence** | Spring Data JPA / Hibernate | 3.3.4 |
 | **Database (Runtime)** | PostgreSQL | 16-alpine |
 | **Database (Tests)** | H2 (PostgreSQL Mode) | In-memory |
@@ -64,7 +112,7 @@ SmartTest AI follows standard Clean Architecture / Layered Architecture principl
 | **Observability** | Spring Boot Actuator | 3.3.4 |
 | **API Documentation**| Springdoc OpenAPI / Swagger UI | 2.6.0 |
 | **Build Tool** | Apache Maven | 3.9+ |
-| **Testing** | JUnit 5, Mockito, AssertJ | Spring Boot Starter Test |
+| **Testing** | JUnit 5, Mockito, AssertJ, Spring Security Test | 3.3.4 |
 | **Containerization** | Docker & Docker Compose | Multi-stage build |
 
 ---
@@ -76,60 +124,73 @@ smarttest-ai/
 ├── src/
 │   ├── main/
 │   │   ├── java/com/smarttestai/
-│   │   │   ├── SmartTestAiApplication.java    # Application entry point
+│   │   │   ├── SmartTestAiApplication.java       # Application entry point
 │   │   │   ├── config/
-│   │   │   │   └── OpenApiConfig.java         # OpenAPI / Swagger configuration
+│   │   │   │   ├── DataInitializer.java          # Admin seed & project migration runner
+│   │   │   │   └── OpenApiConfig.java            # OpenAPI 3 with Bearer JWT config
 │   │   │   ├── controller/
-│   │   │   │   └── ProjectController.java     # REST API Controller
+│   │   │   │   ├── AuthController.java           # Authentication REST Controller
+│   │   │   │   └── ProjectController.java        # Project management REST Controller
 │   │   │   ├── dto/
 │   │   │   │   ├── request/
-│   │   │   │   │   └── CreateProjectRequest.java # Inbound creation DTO with validation
+│   │   │   │   │   ├── CreateProjectRequest.java # Inbound project creation DTO
+│   │   │   │   │   ├── LoginRequest.java         # Inbound login DTO
+│   │   │   │   │   └── RegisterRequest.java      # Inbound registration DTO
 │   │   │   │   └── response/
-│   │   │   │       ├── ErrorResponse.java     # Standardized error payload
-│   │   │   │       └── ProjectResponse.java   # Outbound project presentation DTO
+│   │   │   │       ├── AuthResponse.java         # Outbound JWT & user DTO
+│   │   │   │       ├── ErrorResponse.java        # Standardized error payload
+│   │   │   │       ├── ProjectResponse.java      # Outbound project presentation DTO
+│   │   │   │       └── UserResponse.java         # Safe user presentation DTO
 │   │   │   ├── entity/
-│   │   │   │   └── Project.java               # JPA Domain Entity
+│   │   │   │   ├── Project.java                  # JPA Project Entity with owner relation
+│   │   │   │   ├── Role.java                     # Role enum (ROLE_USER, ROLE_ADMIN)
+│   │   │   │   └── User.java                     # JPA User Entity
 │   │   │   ├── exception/
-│   │   │   │   ├── GlobalExceptionHandler.java# Centralized @RestControllerAdvice
-│   │   │   │   └── ResourceNotFoundException.java # Domain 404 Exception
+│   │   │   │   ├── GlobalExceptionHandler.java   # Centralized @RestControllerAdvice
+│   │   │   │   ├── ResourceNotFoundException.java# Domain 404 Exception
+│   │   │   │   └── UserAlreadyExistsException.java# Domain 409 Exception
 │   │   │   ├── repository/
-│   │   │   │   └── ProjectRepository.java     # Spring Data JPA Repository
+│   │   │   │   ├── ProjectRepository.java        # Spring Data JPA Repository for Projects
+│   │   │   │   └── UserRepository.java           # Spring Data JPA Repository for Users
+│   │   │   ├── security/
+│   │   │   │   ├── CustomAccessDeniedHandler.java# 403 Forbidden handler
+│   │   │   │   ├── CustomUserDetails.java        # Spring Security UserDetails adapter
+│   │   │   │   ├── CustomUserDetailsService.java # User loader service
+│   │   │   │   ├── JwtAuthenticationEntryPoint.java# 401 Unauthorized entry point
+│   │   │   │   ├── JwtAuthenticationFilter.java  # OncePerRequestFilter for Bearer JWT
+│   │   │   │   ├── JwtService.java               # HMAC-SHA256 token operations
+│   │   │   │   └── SecurityConfig.java           # Spring Security filter chain configuration
 │   │   │   └── service/
-│   │   │       └── ProjectService.java        # Core business operations
+│   │   │       ├── AuthService.java              # User registration and login logic
+│   │   │       └── ProjectService.java           # Tenant-isolated project operations
 │   │   └── resources/
-│   │       └── application.yml                # Main runtime configuration
+│   │       └── application.yml                   # Main runtime configuration
 │   └── test/
 │       ├── java/com/smarttestai/
 │       │   ├── controller/
-│       │   │   └── ProjectControllerTest.java # MockMvc web-layer tests
+│       │   │   ├── AuthControllerTest.java       # Auth web-layer tests
+│       │   │   └── ProjectControllerTest.java    # Project web-layer tests with security context
 │       │   ├── integration/
-│       │   │   └── ProjectIntegrationTest.java# Full HTTP-to-Database integration tests
+│       │   │   ├── AuthIntegrationTest.java      # Full end-to-end authentication tests
+│       │   │   ├── ProjectIntegrationTest.java   # Full HTTP-to-Database lifecycle tests
+│       │   │   └── ProjectSecurityIntegrationTest.java # Tenant isolation & IDOR tests
+│       │   ├── security/
+│       │   │   └── JwtServiceTest.java           # JWT token generation & validation tests
 │       │   └── service/
-│       │       └── ProjectServiceTest.java    # Service unit tests with Mockito
+│       │       ├── AuthServiceTest.java          # Auth service unit tests with Mockito
+│       │       └── ProjectServiceTest.java       # Project service ownership unit tests
 │       └── resources/
-│           └── application-test.yml           # H2 PostgreSQL-compatible test configuration
-├── Dockerfile                                 # Multi-stage container definition
-├── docker-compose.yml                         # Orchestration for PostgreSQL + App
-├── .env.example                               # Environment template
-├── .gitignore                                 # Git ignore definitions
-├── pom.xml                                    # Maven build configuration
-└── README.md                                  # Platform documentation
+│           └── application-test.yml              # H2 PostgreSQL-compatible test configuration
+├── Dockerfile                                    # Multi-stage container definition
+├── docker-compose.yml                            # Orchestration for PostgreSQL + App
+├── .env.example                                  # Environment template
+├── pom.xml                                       # Maven build configuration with Security & JJWT
+└── README.md                                     # Platform documentation
 ```
 
 ---
 
-## Prerequisites
-
-- **Java Development Kit (JDK)**: JDK 17 or higher
-- **Apache Maven**: 3.9+ (or use IDE-bundled Maven)
-- **Docker & Docker Compose**: (Optional for containerized execution)
-- **PostgreSQL**: 16+ (or run via Docker Compose)
-
----
-
 ## Environment Variables
-
-SmartTest AI uses environment variables for database connectivity and runtime parameters:
 
 | Variable | Description | Default (Local) |
 | :--- | :--- | :--- |
@@ -139,189 +200,128 @@ SmartTest AI uses environment variables for database connectivity and runtime pa
 | `DB_USERNAME` | Database user | `postgres` |
 | `DB_PASSWORD` | Database password | `postgres` |
 | `SERVER_PORT` | Application HTTP port | `8080` |
+| `JWT_SECRET` | 256-bit secret key for signing JWTs | Base64/Hex 256-bit key |
+| `JWT_EXPIRATION_MS` | JWT token validity in milliseconds | `86400000` (24 hours) |
 
 ---
 
-## Local Development
-
-### PostgreSQL Setup
-
-You can spin up an isolated PostgreSQL container using Docker Compose:
-
-```bash
-docker compose up -d postgres
-```
-
-Or connect to an existing local PostgreSQL instance:
-
-```sql
-CREATE DATABASE smarttest_ai;
-```
-
----
-
-## Running the Application
+## Getting Started
 
 ### 1. Build the application
 ```bash
 mvn clean package -DskipTests
 ```
 
-### 2. Run locally
+### 2. Run with Docker Compose (Recommended)
 ```bash
-java -jar target/smarttest-ai-0.0.1-SNAPSHOT.jar
+docker compose up --build -d
 ```
-Or with Maven:
+
+### 3. Run Locally
 ```bash
+# Start PostgreSQL via docker:
+docker compose up -d postgres
+
+# Run Spring Boot:
 mvn spring-boot:run
 ```
 
-The application starts on port `8080` by default.
-
 ---
 
-## Running Tests
+## Running Automated Tests
 
-The test suite runs with an in-memory H2 database configured in PostgreSQL compatibility mode (`application-test.yml`), meaning **no external database is required to execute tests**.
+All tests run against an in-memory H2 database in PostgreSQL mode (`application-test.yml`), with zero external dependencies.
 
 ```bash
 mvn clean test
 ```
 
-This executes:
-- **Unit Tests (`ProjectServiceTest`)**: Fast business logic tests using Mockito mocks.
-- **Controller Tests (`ProjectControllerTest`)**: Web layer tests validating HTTP status codes, headers, and Jakarta Bean Validation errors using `MockMvc`.
-- **Integration Tests (`ProjectIntegrationTest`)**: Full end-to-end integration tests over real HTTP requests with `TestRestTemplate`.
-
----
-
-## Docker Setup
-
-### Running with Docker Compose (Recommended)
-
-To start both PostgreSQL and the SmartTest AI backend in isolated containers:
-
-```bash
-docker compose up --build -d
-```
-
-Check logs:
-```bash
-docker compose logs -f smarttest-ai
-```
-
-Stop containers:
-```bash
-docker compose down
-```
-
----
-
-## Swagger Documentation
-
-Interactive OpenAPI 3 documentation is available at:
-
-- **Swagger UI**: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
-- **OpenAPI JSON Spec**: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
-
----
-
-## Health Check
-
-Spring Boot Actuator provides liveness and readiness monitoring:
-
-- **Endpoint**: `GET /actuator/health`
-- **URL**: [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health)
-- **Expected Response**:
-  ```json
-  {
-    "status": "UP"
-  }
-  ```
+### Test Coverage Highlights (34 Tests / 100% Pass Rate):
+* **Unit Tests**:
+  * [`JwtServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/security/JwtServiceTest.java): Token issuance, claim parsing (`sub`, `userId`, `role`), tampering rejection.
+  * [`AuthServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/service/AuthServiceTest.java): User creation, password hashing, duplicate email detection, credential verification.
+  * [`ProjectServiceTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/service/ProjectServiceTest.java): Automatic owner binding, user tenant filtering, admin overarching access.
+* **Web Layer Tests**:
+  * [`AuthControllerTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/controller/AuthControllerTest.java): MockMvc validation on registration/login endpoints.
+  * [`ProjectControllerTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/controller/ProjectControllerTest.java): Web-layer status codes, header validation, and error serialization with security context.
+* **Integration Tests**:
+  * [`AuthIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/AuthIntegrationTest.java): End-to-end registration, verification of BCrypt hashes in DB, and login authentication.
+  * [`ProjectSecurityIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/ProjectSecurityIntegrationTest.java): Multi-user tenant isolation, IDOR prevention (User A gets 404 accessing User B's project), unauthenticated 401 checks, and Admin cross-tenant management.
+  * [`ProjectIntegrationTest`](file:///c:/Users/kapoo/OneDrive/Desktop/SmartTest-AI/src/test/java/com/smarttestai/integration/ProjectIntegrationTest.java): Complete project CRUD lifecycle under authenticated session.
 
 ---
 
 ## API Endpoints
 
-All Project APIs are prefixed with `/api/v1/projects`.
+### Authentication APIs (Public)
 
-### 1. Create Project
-- **HTTP Method**: `POST`
-- **Path**: `/api/v1/projects`
+#### 1. Register User
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/register`
 - **Request Body**:
   ```json
   {
-    "name": "E-Commerce Testing",
-    "description": "Automation testing project for retail web app"
+    "name": "Jane Doe",
+    "email": "jane@smarttestai.com",
+    "password": "SecurePassword123!"
   }
   ```
 - **Response**: `201 Created`
-  - Header: `Location: /api/v1/projects/{id}`
-  - Body:
-    ```json
-    {
-      "id": 1,
-      "name": "E-Commerce Testing",
-      "description": "Automation testing project for retail web app",
-      "createdAt": "2026-09-22T06:40:00Z",
-      "updatedAt": "2026-09-22T06:40:00Z"
-    }
-    ```
-
-### 2. Get All Projects
-- **HTTP Method**: `GET`
-- **Path**: `/api/v1/projects`
-- **Response**: `200 OK`
-  ```json
-  [
-    {
-      "id": 1,
-      "name": "E-Commerce Testing",
-      "description": "Automation testing project for retail web app",
-      "createdAt": "2026-09-22T06:40:00Z",
-      "updatedAt": "2026-09-22T06:40:00Z"
-    }
-  ]
-  ```
-
-### 3. Get Project By ID
-- **HTTP Method**: `GET`
-- **Path**: `/api/v1/projects/{id}`
-- **Response**: `200 OK`
   ```json
   {
-    "id": 1,
-    "name": "E-Commerce Testing",
-    "description": "Automation testing project for retail web app",
-    "createdAt": "2026-09-22T06:40:00Z",
-    "updatedAt": "2026-09-22T06:40:00Z"
-  }
-  ```
-- **Error Response (If missing)**: `404 Not Found`
-  ```json
-  {
-    "timestamp": "2026-09-22T06:45:00Z",
-    "status": 404,
-    "error": "PROJECT_NOT_FOUND",
-    "message": "Project not found with id: 999",
-    "path": "/api/v1/projects/999"
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "expiresIn": 86400000,
+    "user": {
+      "id": 2,
+      "name": "Jane Doe",
+      "email": "jane@smarttestai.com",
+      "role": "ROLE_USER",
+      "createdAt": "2026-09-23T04:15:00Z"
+    }
   }
   ```
 
-### 4. Delete Project
-- **HTTP Method**: `DELETE`
-- **Path**: `/api/v1/projects/{id}`
-- **Response**: `204 No Content`
-- **Error Response (If missing)**: `404 Not Found`
+#### 2. Login User
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/login`
+- **Request Body**:
+  ```json
+  {
+    "email": "jane@smarttestai.com",
+    "password": "SecurePassword123!"
+  }
+  ```
+- **Response**: `200 OK` (returns JWT `token` and `user` profile)
+
+---
+
+### Project APIs (Protected — Requires `Authorization: Bearer <JWT>`)
+
+| Method | Path | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/projects` | Authenticated | Create project. Owner is automatically set to current user. |
+| `GET` | `/api/v1/projects` | Authenticated | List projects (`ROLE_USER` sees owned; `ROLE_ADMIN` sees all). |
+| `GET` | `/api/v1/projects/{id}` | Authenticated | Get project by ID (`ROLE_USER` can only access owned; else `404`). |
+| `DELETE`| `/api/v1/projects/{id}` | Authenticated | Delete project (`ROLE_USER` can only delete owned; `ROLE_ADMIN` can delete any). |
+
+---
+
+## Using Swagger UI with Authentication
+
+1. Open **Swagger UI**: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+2. Use `POST /api/v1/auth/register` or `POST /api/v1/auth/login` to obtain a JWT token.
+3. Copy the `token` string from the JSON response.
+4. Click the green **Authorize 🔓** button at the top right of the Swagger UI page.
+5. Paste the token into the value field and click **Authorize**.
+6. All subsequent requests to `/api/v1/projects` will automatically include the `Authorization: Bearer <token>` header.
 
 ---
 
 ## Future Roadmap
 
-The following advanced capabilities are scheduled for subsequent phases and are **NOT IMPLEMENTED in Phase 1**:
-
-- [ ] **Phase 2 — AI Test Case Generation**: Natural language user story ingestion and automated scenario generation via LLM.
-- [ ] **Phase 3 — Selenium Test Automation**: Automated executable Selenium Java test script generation and execution runner.
-- [ ] **Phase 4 — DOM Tree Analysis & Locator Engine**: Real-time webpage DOM capture, semantic tagging, and resilient selector generation.
-- [ ] **Phase 5 — Self-Healing Engine**: Dynamic fallback locator matching, automatic script healing, and healing audit records.
-- [ ] **Phase 6 — Analytics & CI/CD Integrations**: Test run metrics, flaky test detection, and webhook notifications.
+- [ ] **Phase 3 — AI Test Case Generation**: Natural language user story ingestion and scenario generation via LLM.
+- [ ] **Phase 4 — Selenium Test Automation**: Automated executable Selenium Java test script generation and execution runner.
+- [ ] **Phase 5 — DOM Tree Analysis & Locator Engine**: Real-time webpage DOM capture, semantic tagging, and resilient selector generation.
+- [ ] **Phase 6 — Self-Healing Engine**: Dynamic fallback locator matching, automatic script healing, and healing audit records.
+- [ ] **Phase 7 — Analytics & CI/CD Integrations**: Test run metrics, flaky test detection, and webhook notifications.

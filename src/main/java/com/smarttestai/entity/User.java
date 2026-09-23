@@ -2,12 +2,11 @@ package com.smarttestai.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -16,8 +15,8 @@ import java.time.Instant;
 import java.util.Objects;
 
 @Entity
-@Table(name = "projects")
-public class Project {
+@Table(name = "users")
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,12 +25,15 @@ public class Project {
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(length = 1000)
-    private String description;
+    @Column(nullable = false, unique = true, length = 150)
+    private String email;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "owner_id", nullable = false)
-    private User owner;
+    @Column(nullable = false, length = 255)
+    private String password;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Role role;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
@@ -41,14 +43,15 @@ public class Project {
     @Column(nullable = false)
     private Instant updatedAt;
 
-    public Project() {
+    public User() {
     }
 
-    public Project(Long id, String name, String description, User owner, Instant createdAt, Instant updatedAt) {
+    public User(Long id, String name, String email, String password, Role role, Instant createdAt, Instant updatedAt) {
         this.id = id;
         this.name = name;
-        this.description = description;
-        this.owner = owner;
+        this.email = email;
+        this.password = password;
+        this.role = role;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -69,20 +72,28 @@ public class Project {
         this.name = name;
     }
 
-    public String getDescription() {
-        return description;
+    public String getEmail() {
+        return email;
     }
 
-    public void setDescription(String description) {
-        this.description = description;
+    public void setEmail(String email) {
+        this.email = email;
     }
 
-    public User getOwner() {
-        return owner;
+    public String getPassword() {
+        return password;
     }
 
-    public void setOwner(User owner) {
-        this.owner = owner;
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public Role getRole() {
+        return role;
+    }
+
+    public void setRole(Role role) {
+        this.role = role;
     }
 
     public Instant getCreatedAt() {
@@ -105,8 +116,8 @@ public class Project {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Project project = (Project) o;
-        return Objects.equals(id, project.id);
+        User user = (User) o;
+        return Objects.equals(id, user.id);
     }
 
     @Override
@@ -121,8 +132,9 @@ public class Project {
     public static class Builder {
         private Long id;
         private String name;
-        private String description;
-        private User owner;
+        private String email;
+        private String password;
+        private Role role;
         private Instant createdAt;
         private Instant updatedAt;
 
@@ -136,13 +148,18 @@ public class Project {
             return this;
         }
 
-        public Builder description(String description) {
-            this.description = description;
+        public Builder email(String email) {
+            this.email = email;
             return this;
         }
 
-        public Builder owner(User owner) {
-            this.owner = owner;
+        public Builder password(String password) {
+            this.password = password;
+            return this;
+        }
+
+        public Builder role(Role role) {
+            this.role = role;
             return this;
         }
 
@@ -156,8 +173,8 @@ public class Project {
             return this;
         }
 
-        public Project build() {
-            return new Project(id, name, description, owner, createdAt, updatedAt);
+        public User build() {
+            return new User(id, name, email, password, role, createdAt, updatedAt);
         }
     }
 }

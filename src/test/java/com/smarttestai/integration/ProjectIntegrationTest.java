@@ -1,9 +1,12 @@
 package com.smarttestai.integration;
 
 import com.smarttestai.dto.request.CreateProjectRequest;
+import com.smarttestai.dto.request.RegisterRequest;
+import com.smarttestai.dto.response.AuthResponse;
 import com.smarttestai.dto.response.ErrorResponse;
 import com.smarttestai.dto.response.ProjectResponse;
 import com.smarttestai.repository.ProjectRepository;
+import com.smarttestai.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,6 +16,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,27 +39,63 @@ class ProjectIntegrationTest {
     @Autowired
     private ProjectRepository projectRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    private String token;
+
     private String getBaseUrl() {
         return "http://localhost:" + port + "/api/v1/projects";
     }
 
+    private String getAuthUrl() {
+        return "http://localhost:" + port + "/api/v1/auth";
+    }
+
+    private HttpHeaders createAuthHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        return headers;
+    }
+
     @BeforeEach
-    void cleanUp() {
+    void cleanUpAndAuthenticate() {
+        restTemplate.getRestTemplate().setRequestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory());
         projectRepository.deleteAll();
+        userRepository.deleteAll();
+
+        RegisterRequest registerRequest = RegisterRequest.builder()
+                .name("Integration User")
+                .email("integration@smarttestai.com")
+                .password("Password123!")
+                .build();
+
+        ResponseEntity<AuthResponse> response = restTemplate.postForEntity(
+                getAuthUrl() + "/register",
+                registerRequest,
+                AuthResponse.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        this.token = response.getBody().getToken();
     }
 
     @Test
     @DisplayName("End-to-End lifecycle test: Create -> Get -> List -> Delete -> Not Found")
     void fullProjectLifecycleIntegrationTest() {
+        HttpHeaders authHeaders = createAuthHeaders();
+
         // 1. Create Project
         CreateProjectRequest createRequest = CreateProjectRequest.builder()
                 .name("Integration QA Project")
                 .description("Automated end-to-end testing pipeline")
                 .build();
 
+        HttpEntity<CreateProjectRequest> createEntity = new HttpEntity<>(createRequest, authHeaders);
+
         ResponseEntity<ProjectResponse> createResponse = restTemplate.postForEntity(
                 getBaseUrl(),
-                createRequest,
+                createEntity,
                 ProjectResponse.class
         );
 
@@ -67,10 +107,15 @@ class ProjectIntegrationTest {
         assertThat(createdId).isNotNull();
         assertThat(createResponse.getBody().getName()).isEqualTo("Integration QA Project");
         assertThat(createResponse.getBody().getDescription()).isEqualTo("Automated end-to-end testing pipeline");
+        assertThat(createResponse.getBody().getOwnerEmail()).isEqualTo("integration@smarttestai.com");
 
         // 2. Get Project By ID
-        ResponseEntity<ProjectResponse> getResponse = restTemplate.getForEntity(
+        HttpEntity<Void> requestEntity = new HttpEntity<>(authHeaders);
+
+        ResponseEntity<ProjectResponse> getResponse = restTemplate.exchange(
                 getBaseUrl() + "/" + createdId,
+                HttpMethod.GET,
+                requestEntity,
                 ProjectResponse.class
         );
 
@@ -83,7 +128,7 @@ class ProjectIntegrationTest {
         ResponseEntity<List<ProjectResponse>> listResponse = restTemplate.exchange(
                 getBaseUrl(),
                 HttpMethod.GET,
-                null,
+                requestEntity,
                 new ParameterizedTypeReference<>() {}
         );
 
@@ -98,9 +143,11 @@ class ProjectIntegrationTest {
                 .description("Invalid")
                 .build();
 
+        HttpEntity<CreateProjectRequest> invalidEntity = new HttpEntity<>(invalidRequest, authHeaders);
+
         ResponseEntity<ErrorResponse> validationResponse = restTemplate.postForEntity(
                 getBaseUrl(),
-                invalidRequest,
+                invalidEntity,
                 ErrorResponse.class
         );
 
@@ -113,15 +160,17 @@ class ProjectIntegrationTest {
         ResponseEntity<Void> deleteResponse = restTemplate.exchange(
                 getBaseUrl() + "/" + createdId,
                 HttpMethod.DELETE,
-                null,
+                requestEntity,
                 Void.class
         );
 
         assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 
         // 6. Verify Project is Deleted (404 Not Found)
-        ResponseEntity<ErrorResponse> getAfterDeleteResponse = restTemplate.getForEntity(
+        ResponseEntity<ErrorResponse> getAfterDeleteResponse = restTemplate.exchange(
                 getBaseUrl() + "/" + createdId,
+                HttpMethod.GET,
+                requestEntity,
                 ErrorResponse.class
         );
 

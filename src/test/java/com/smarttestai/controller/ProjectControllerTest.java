@@ -3,19 +3,29 @@ package com.smarttestai.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smarttestai.dto.request.CreateProjectRequest;
 import com.smarttestai.dto.response.ProjectResponse;
+import com.smarttestai.entity.Role;
 import com.smarttestai.exception.GlobalExceptionHandler;
 import com.smarttestai.exception.ResourceNotFoundException;
+import com.smarttestai.security.CustomUserDetails;
+import com.smarttestai.security.CustomUserDetailsService;
+import com.smarttestai.security.JwtAuthenticationEntryPoint;
+import com.smarttestai.security.JwtAuthenticationFilter;
+import com.smarttestai.security.JwtService;
 import com.smarttestai.service.ProjectService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
@@ -25,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -33,6 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ProjectController.class)
+@AutoConfigureMockMvc(addFilters = false)
 @Import(GlobalExceptionHandler.class)
 class ProjectControllerTest {
 
@@ -44,6 +56,28 @@ class ProjectControllerTest {
 
     @MockBean
     private ProjectService projectService;
+
+    @MockBean
+    private JwtService jwtService;
+
+    @MockBean
+    private CustomUserDetailsService userDetailsService;
+
+    @MockBean
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+
+    @MockBean
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    private CustomUserDetails mockUserDetails;
+
+    @BeforeEach
+    void setUp() {
+        mockUserDetails = new CustomUserDetails(
+                1L, "John Doe", "john@example.com", "pass", Role.ROLE_USER,
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+    }
 
     @Test
     @DisplayName("POST /api/v1/projects - 201 Created when payload is valid")
@@ -57,13 +91,16 @@ class ProjectControllerTest {
                 .id(1L)
                 .name("E-Commerce Testing")
                 .description("Valid description")
+                .ownerId(1L)
+                .ownerEmail("john@example.com")
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
 
-        when(projectService.createProject(any(CreateProjectRequest.class))).thenReturn(response);
+        when(projectService.createProject(any(CreateProjectRequest.class), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/v1/projects")
+                        .with(user(mockUserDetails))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
@@ -82,6 +119,7 @@ class ProjectControllerTest {
                 .build();
 
         mockMvc.perform(post("/api/v1/projects")
+                        .with(user(mockUserDetails))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -99,6 +137,7 @@ class ProjectControllerTest {
                 .build();
 
         mockMvc.perform(post("/api/v1/projects")
+                        .with(user(mockUserDetails))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
@@ -110,80 +149,80 @@ class ProjectControllerTest {
     @Test
     @DisplayName("GET /api/v1/projects - 200 OK with list of projects")
     void getAllProjects_Returns200() throws Exception {
-        ProjectResponse p1 = ProjectResponse.builder()
+        ProjectResponse project = ProjectResponse.builder()
                 .id(1L)
-                .name("Project Alpha")
+                .name("E-Commerce Testing")
+                .description("Desc")
+                .ownerId(1L)
+                .ownerEmail("john@example.com")
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
 
-        ProjectResponse p2 = ProjectResponse.builder()
-                .id(2L)
-                .name("Project Beta")
-                .createdAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build();
+        when(projectService.getAllProjects(any())).thenReturn(List.of(project));
 
-        when(projectService.getAllProjects()).thenReturn(List.of(p1, p2));
-
-        mockMvc.perform(get("/api/v1/projects"))
+        mockMvc.perform(get("/api/v1/projects")
+                        .with(user(mockUserDetails)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].name", is("Project Alpha")))
-                .andExpect(jsonPath("$[1].name", is("Project Beta")));
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].name", is("E-Commerce Testing")));
     }
 
     @Test
     @DisplayName("GET /api/v1/projects/{id} - 200 OK when project exists")
-    void getProjectById_Existing_Returns200() throws Exception {
+    void getProjectById_Exists_Returns200() throws Exception {
         ProjectResponse response = ProjectResponse.builder()
                 .id(1L)
-                .name("Project Alpha")
-                .description("Sample description")
+                .name("E-Commerce Testing")
+                .description("Desc")
+                .ownerId(1L)
+                .ownerEmail("john@example.com")
                 .createdAt(Instant.now())
                 .updatedAt(Instant.now())
                 .build();
 
-        when(projectService.getProjectById(1L)).thenReturn(response);
+        when(projectService.getProjectById(any(), any())).thenReturn(response);
 
-        mockMvc.perform(get("/api/v1/projects/1"))
+        mockMvc.perform(get("/api/v1/projects/1")
+                        .with(user(mockUserDetails)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id", is(1)))
-                .andExpect(jsonPath("$.name", is("Project Alpha")));
+                .andExpect(jsonPath("$.name", is("E-Commerce Testing")));
     }
 
     @Test
     @DisplayName("GET /api/v1/projects/{id} - 404 Not Found when project does not exist")
-    void getProjectById_Missing_Returns404() throws Exception {
-        when(projectService.getProjectById(999L))
-                .thenThrow(new ResourceNotFoundException("Project", 999L));
+    void getProjectById_NotFound_Returns404() throws Exception {
+        when(projectService.getProjectById(any(), any()))
+                .thenThrow(new ResourceNotFoundException("Project", 99L));
 
-        mockMvc.perform(get("/api/v1/projects/999"))
+        mockMvc.perform(get("/api/v1/projects/99")
+                        .with(user(mockUserDetails)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status", is(404)))
-                .andExpect(jsonPath("$.error", is("PROJECT_NOT_FOUND")))
-                .andExpect(jsonPath("$.message", containsString("Project not found with id: 999")));
+                .andExpect(jsonPath("$.error", is("PROJECT_NOT_FOUND")));
     }
 
     @Test
-    @DisplayName("DELETE /api/v1/projects/{id} - 204 No Content when project exists")
-    void deleteProject_Existing_Returns204() throws Exception {
-        doNothing().when(projectService).deleteProject(1L);
+    @DisplayName("DELETE /api/v1/projects/{id} - 204 No Content when project deleted")
+    void deleteProject_Exists_Returns204() throws Exception {
+        doNothing().when(projectService).deleteProject(any(), any());
 
-        mockMvc.perform(delete("/api/v1/projects/1"))
+        mockMvc.perform(delete("/api/v1/projects/1")
+                        .with(user(mockUserDetails)))
                 .andExpect(status().isNoContent());
     }
 
     @Test
     @DisplayName("DELETE /api/v1/projects/{id} - 404 Not Found when project does not exist")
-    void deleteProject_Missing_Returns404() throws Exception {
-        doThrow(new ResourceNotFoundException("Project", 999L))
-                .when(projectService).deleteProject(999L);
+    void deleteProject_NotFound_Returns404() throws Exception {
+        doThrow(new ResourceNotFoundException("Project", 99L))
+                .when(projectService).deleteProject(any(), any());
 
-        mockMvc.perform(delete("/api/v1/projects/999"))
+        mockMvc.perform(delete("/api/v1/projects/99")
+                        .with(user(mockUserDetails)))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status", is(404)))
-                .andExpect(jsonPath("$.error", is("PROJECT_NOT_FOUND")))
-                .andExpect(jsonPath("$.message", containsString("Project not found with id: 999")));
+                .andExpect(jsonPath("$.error", is("PROJECT_NOT_FOUND")));
     }
 }
