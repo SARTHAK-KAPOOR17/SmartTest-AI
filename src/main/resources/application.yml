@@ -33,6 +33,13 @@ llm:
   timeout-seconds: ${LLM_TIMEOUT_SECONDS:30}
   max-tokens: ${LLM_MAX_TOKENS:3000}
 
+selenium:
+  base-url: ${SELENIUM_BASE_URL:http://localhost:8080}
+  default-browser: ${SELENIUM_DEFAULT_BROWSER:CHROME}
+  headless: ${SELENIUM_HEADLESS:true}
+  implicit-wait-seconds: ${SELENIUM_IMPLICIT_WAIT_SECONDS:10}
+  page-load-timeout-seconds: ${SELENIUM_PAGE_LOAD_TIMEOUT_SECONDS:30}
+
 management:
   endpoints:
     web:

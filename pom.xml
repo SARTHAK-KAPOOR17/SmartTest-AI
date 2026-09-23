@@ -21,6 +21,7 @@
         <java.version>17</java.version>
         <springdoc.version>2.6.0</springdoc.version>
         <langchain4j.version>0.35.0</langchain4j.version>
+        <selenium.version>4.25.0</selenium.version>
     </properties>
 
     <dependencies>
@@ -89,6 +90,13 @@
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai</artifactId>
             <version>${langchain4j.version}</version>
+        </dependency>
+
+        <!-- Selenium Java (Phase 5: Script Generation & Modeling; Phase 6: Execution) -->
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-java</artifactId>
+            <version>${selenium.version}</version>
         </dependency>
 
         <!-- Test Dependencies -->
